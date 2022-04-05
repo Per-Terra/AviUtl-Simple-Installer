@@ -192,7 +192,7 @@ function Install-UriArchive {
 # 処理ここから
 [String]$root = New-DirectryIfNotExist $InstallPath
 [String]$plugins = New-DirectryIfNotExist (Join-Path $InstallPath 'plugins')
-[String]$sclipt = New-DirectryIfNotExist (Join-Path $InstallPath 'script')
+[String]$script = New-DirectryIfNotExist (Join-Path $InstallPath 'script')
 
 Install-UriArchive $aviutl $root
 Install-UriArchive $exedit $root
