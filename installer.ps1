@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 
-#requires -version 3.0
+#requires -version 5.0
 
 <#
 .SYNOPSIS
@@ -40,7 +40,7 @@ Push-Location -Path $InstallPath
 
 # 7Zip4Powershellモジュールのインストール
 if (!(Get-Command Expand-7Zip -ea SilentlyContinue)) {
-    Install-Module -Name 7Zip4Powershell
+    Install-Module -Name 7Zip4Powershell -Scope CurrentUser
 }
 
 # ディレクトリが存在しない場合に作成してパスを返す
@@ -94,7 +94,7 @@ function Get-ArchiveItems {
         # @()で囲うことで要素が一つの場合でも配列として扱う
         # https://social.technet.microsoft.com/Forums/ja-JP/230719ec-e5a8-4b32-9cf9-b7bdec0b50c3/22793259681239526684320131237312428123901235612427389173044612?forum=powershellja
         if (@($items).Count -eq 1 -and $items.PSIsContainer) {
-            return Get-ChildItem $items
+            return Get-ChildItem $items.FullName
         }
         else {
             return $items
@@ -209,7 +209,7 @@ function Install-Items {
             $Items | Where-Object { $_.Name -notlike $Filter } | Where-Object { $_.Name -notlike $Exclude } |
             ForEach-Object {
                 $Prefixed = $Prefix + $_.Name
-                Copy-Item $_ -Destination $Path\$Prefixed -Force
+                Copy-Item $_.FullName -Destination (Join-Path $Path $Prefixed) -Force
             }
         }
     }
@@ -282,11 +282,14 @@ function Install-AmazonpoiArchive {
 ## Recomended
 [string]$aviutl = "http://spring-fragrance.mints.ne.jp/aviutl/aviutl110.zip"
 [string]$exedit = "http://spring-fragrance.mints.ne.jp/aviutl/exedit92.zip"
-[string]$lw = Get-GithubDownloadUrl "https://api.github.com/repos/Mr-Ojii/L-SMASH-Works-Auto-Builds/releases/latest" "Mr-Ojii_AviUtl.zip"
-[string]$InputPipePlugin = Get-GithubDownloadUrl "https://api.github.com/repos/amate/InputPipePlugin/releases/latest"
+[string]$lw = "https://github.com/Mr-Ojii/L-SMASH-Works-Auto-Builds/releases/download/build-2022-04-05-01-57-11/L-SMASH-Works_rev1086_Mr-Ojii_AviUtl.zip"
+#[string]$lw = Get-GithubDownloadUrl "https://api.github.com/repos/Mr-Ojii/L-SMASH-Works-Auto-Builds/releases/latest" "Mr-Ojii_AviUtl.zip"
+[string]$InputPipePlugin = "https://github.com/amate/InputPipePlugin/releases/download/v1.8/InputPipePlugin_1.8.zip"
+#[string]$InputPipePlugin = Get-GithubDownloadUrl "https://api.github.com/repos/amate/InputPipePlugin/releases/latest"
 [string]$easymp4 = "https://aoytsk.blog.jp/aviutl/easymp4.zip"
 [string]$patchaul = "https://scrapbox.io/files/6242bf590ea51d001d275052.zip"
-[string]$luajit = Get-GithubDownloadUrl "https://api.github.com/repos/Per-Terra/LuaJIT-Auto-Builds/releases/latest" "Win_x86.zip"
+[string]$luajit = "https://github.com/Per-Terra/LuaJIT-Auto-Builds/releases/download/build-2022-04-05-00-24-34/LuaJIT-2.1.0-beta3_Win_x86.zip"
+#[string]$luajit = Get-GithubDownloadUrl "https://api.github.com/repos/Per-Terra/LuaJIT-Auto-Builds/releases/latest" "Win_x86.zip"
 
 ## rikky
 [string]$rikkky_module = "rikkymodulea2Z"
