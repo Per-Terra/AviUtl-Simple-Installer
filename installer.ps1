@@ -109,7 +109,7 @@ function Get-UriFile {
 }
 
 # GitHubのReleasesに存在する最新のファイルのUrlを取得する
-#   第一引数: GitHubのReleasesを取得するAPIのURL (https://api.github.com/repos/<OWNER>/<REPOSITORY>/releases)
+#   第一引数: GitHubのReleasesを取得するAPIのURL (https://api.github.com/repos/<OWNER>/<REPOSITORY>/releases/latest)
 #   第二引数: (省略可) 取得するファイルのキーワード (x86, AviUtl など)
 function Get-GithubLatestUrl {
     param (
@@ -183,11 +183,11 @@ function Install-UriArchive {
 # URLs
 [String]$aviutl = "http://spring-fragrance.mints.ne.jp/aviutl/aviutl110.zip"
 [String]$exedit = "http://spring-fragrance.mints.ne.jp/aviutl/exedit92.zip"
-[String]$lw = Get-GithubLatestUrl "https://api.github.com/repos/Mr-Ojii/L-SMASH-Works-Auto-Builds/releases" "Mr-Ojii_AviUtl.zip"
-[String]$InputPipePlugin = Get-GithubLatestUrl "https://api.github.com/repos/amate/InputPipePlugin/releases"
+[String]$lw = Get-GithubLatestUrl "https://api.github.com/repos/Mr-Ojii/L-SMASH-Works-Auto-Builds/releases/latest" "Mr-Ojii_AviUtl.zip"
+[String]$InputPipePlugin = Get-GithubLatestUrl "https://api.github.com/repos/amate/InputPipePlugin/releases/latest"
 [String]$easymp4 = "https://aoytsk.blog.jp/aviutl/easymp4.zip"
 [String]$patchaul = "https://scrapbox.io/files/6242bf590ea51d001d275052.zip"
-[String]$luajit = Get-GithubLatestUrl "https://api.github.com/repos/Per-Terra/LuaJIT-Auto-Builds/releases" "Win_x86.zip"
+[String]$luajit = Get-GithubLatestUrl "https://api.github.com/repos/Per-Terra/LuaJIT-Auto-Builds/releases/latest" "Win_x86.zip"
 
 # 処理ここから
 [String]$root = New-DirectryIfNotExist $InstallPath
