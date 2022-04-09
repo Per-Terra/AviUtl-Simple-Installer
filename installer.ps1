@@ -5,16 +5,16 @@
 <#
 .SYNOPSIS
     AviUtlの環境を構築します
-.DESCRIPTION
-    https://scrapbox.io/aviutl/セットアップ に基づき、AviUtlと周辺プラグインを含めた環境を構築します。
 .PARAMETER InstallPath
     インストール先のパスを指定します。デフォルトではカレントディレクトリ内のtestディレクトリが指定されます。
 .PARAMETER WorkingDirectry
-    作業用フォルダを指定します。デフォルトでは TEMP\aviutl が使用されます。
+    作業用フォルダを指定します。デフォルトでは C:\<User>\AppData\Local\TEMP\aviutl が使用されます。
 .PARAMETER KeepForeignData
     インストール後に作業用フォルダを保持する場合に使用します。
 .EXAMPLE
-    installer.ps1 C:\Path\To\Aviutl
+    installer.ps1 C:\Path\To\Aviutl -Scrapbox
+.EXAMPLE
+    installer.ps1 C:\Path\To\aviutl -exedit -KeepForeignData
 .LINK
     https://scrapbox.io/aviutl/セットアップ
 #>
@@ -32,10 +32,21 @@ param(
     $WorkingDirectry = (New-Item (Join-Path $env:TEMP aviutl) -ItemType Directory -Force),
     [Parameter()]
     [switch]
-    $KeepForeignData
+    $KeepForeignData,
+
+    [Parameter()]
+    [switch]
+    $All,$Scrapbox,
+
+    [Parameter()]
+    [switch]$exedit, [switch]$lw, [switch]$InputPipePlugin, [switch]$easymp4, [switch]$patchaul, [switch]$rikkky_module, [switch]$LuaJIT,
+
+    # rigaya
+    [Parameter()]
+    [switch]$x264guiEx, [switch]$x265guiEx, [switch]$svtAV1guiEx, [switch]$QSVEnc, [switch]$NVEnc, [switch]$VCEEnc, [switch]$ffmpegOut
 )
 
-Set-StrictMode -Version Latest
+#Set-StrictMode -Version Latest
 Push-Location -Path $InstallPath
 
 # 7Zip4Powershellモジュールのインストール
@@ -114,7 +125,9 @@ function Get-UriFile {
         [string]
         $DestinationPath = $WorkingDirectry
     )
-
+    if (!(Test-Path $DestinationPath)) {
+        New-Item $DestinationPath -ItemType Directory
+    }
     $o = Join-Path $DestinationPath ([System.IO.Path]::GetFileName($Uri))
     if (!(Test-Path $o)) {
         Invoke-WebRequest $Uri -OutFile $o
@@ -144,11 +157,18 @@ function Get-GithubDownloadUrl {
         return @($json.assets.browser_download_url)[0].ToString()
     }
     else {
-        return ($json.assets.browser_download_url | Select-String $KeyWord)[0].ToString()
+        $Url = $json.assets.browser_download_url | Select-String $KeyWord
+        if ($Url) {
+            return $Url[0].ToString()
+        }
+        else {
+            Write-Error "Resource not found on GitHub"
+            return $null
+        }
     }
 }
 
-function Get-AmazonpoiArchive {
+function Get-AmazonArchive {
     param (
         [Parameter(Mandatory = $true,
             ValueFromPipeline = $true,
@@ -160,16 +180,21 @@ function Get-AmazonpoiArchive {
         $DestinationPath = $WorkingDirectry
     )
 
-    $d = Invoke-WebRequest -Headers @{"Referer" = "https://hazumurhythm.com/wev/amazon/?script=$Id" } https://hazumurhythm.com/php/amazon_download.php?name=$Id
+    # キャッシュの存在確認
+    if ($AmazonFileName[$Id] -and (Test-Path Join-Path $DestinationPath $AmazonFileName[$Id])) {
+        return Join-Path $DestinationPath $AmazonFileName[$Id]
+    } else {
+        $response = Invoke-WebRequest -Headers @{"Referer" = "https://hazumurhythm.com/wev/amazon/?script=$Id" } https://hazumurhythm.com/php/amazon_download.php?name=$Id
 
-    # ファイル名取得
-    [string]$d.Headers."Content-Disposition" -match 'filename="(?<filename>.*?)"'
-    $o = Join-Path $DestinationPath $Matches.filename
+        # ファイル名取得
+        [string]$response.Headers."Content-Disposition" -match 'filename="(?<filename>.*?)"'
+        # ファイル名をキャッシュ
+        $AmazonFileName += @{"$Id" = "$filename"}
 
-    if (!(Test-Path $o)) {
-        [System.IO.File]::WriteAllBytes($o, $d.Content)
+        $file = Join-Path $DestinationPath $Matches.filename
+        [System.IO.File]::WriteAllBytes($file, $response.Content)
+        return Convert-Path $file
     }
-    return Convert-Path $o
 }
 
 function Install-Items {
@@ -203,111 +228,189 @@ function Install-Items {
 
     if ($Filter) {
         $Items | Where-Object { $_.Name -like $Filter } |
-        Copy-Item -Destination $Path -Force
+        Copy-Item -Destination $Path -Recurse -Force
 
         if ($Prefix) {
             $Items | Where-Object { $_.Name -notlike $Filter } | Where-Object { $_.Name -notlike $Exclude } |
             ForEach-Object {
                 $Prefixed = $Prefix + $_.Name
-                Copy-Item $_.FullName -Destination (Join-Path $Path $Prefixed) -Force
+                Copy-Item $_.FullName -Destination (Join-Path $Path $Prefixed) -Recurse -Force
             }
         }
     }
     else {
-        $Items | Copy-Item -Destination $Path -Force
+        $Items | Copy-Item -Destination $Path -Recurse -Force
     }
 }
 
-function Install-UriArchive {
-    param(
+function Install-Item {
+    param (
         [Parameter(Mandatory = $true,
             ValueFromPipeline = $true,
             Position = 0)]
         [string]
-        $Uri,
-
-        [Parameter(Mandatory = $true,
-            Position = 1)]
-        [string]
-        $Path,
-
-        [Parameter()]
-        [string]
-        $Filter,
-
-        [Parameter()]
-        [string]
-        $Prefix,
-
-        [Parameter()]
-        [string]
-        $Exclude
+        $Name
     )
 
-    $Items = Get-UriFile $Uri | Get-ArchiveItems
-    Install-Items $Items -Path $Path -Filter $Filter -Prefix $Prefix -Exclude $Exclude
+    $item = $itemTable[$Name]
+
+    if ($item.url) {
+        $items = $item.url | Get-UriFile | Get-ArchiveItems
+    }
+    elseif ($item.github) {
+        $GitHubDownloadUrl = Get-GithubDownloadUrl $item.github.url $item.github.keyword
+        if ($null -ne $GitHubDownloadUrl) {
+            $item.url = $GitHubDownloadUrl # URLのキャッシュ
+            $items = $item.url | Get-UriFile | Get-ArchiveItems
+        }
+    }
+    elseif ($item.amazon) {
+        $items = Get-AmazonArchive $item.amazon.id | Get-ArchiveItems
+    }
+
+    if ($items) {
+        Install-Items $items -Path (Get-Variable $item.path -ValueOnly) -Filter $item.filter -Prefix $item.prefix -Exclude $item.exclude
+    }
 }
 
-function Install-AmazonpoiArchive {
-    param(
-        [Parameter(Mandatory = $true,
-            ValueFromPipeline = $true,
-            Position = 0)]
-        [string]
-        $Id,
-
-        [Parameter(Mandatory = $true,
-            Position = 1)]
-        [string]
-        $Path,
-
-        [Parameter()]
-        [string]
-        $Filter,
-
-        [Parameter()]
-        [string]
-        $Prefix,
-
-        [Parameter()]
-        [string]
-        $Exclude
-    )
-
-    $Items = Get-AmazonpoiArchive $Id | Get-ArchiveItems
-    Install-Items $Items -Path $Path -Filter $Filter -Prefix $Prefix -Exclude $Exclude
+# itemTable
+$coreTable = @{
+    "aviutl" = @{
+        "url"  = "http://spring-fragrance.mints.ne.jp/aviutl/aviutl110.zip"
+        "path" = "root"
+    }
+    "exedit" = @{
+        "url"  = "http://spring-fragrance.mints.ne.jp/aviutl/exedit92.zip"
+        "path" = "root"
+    }
 }
 
-# URLs
-## Recomended
-[string]$aviutl = "http://spring-fragrance.mints.ne.jp/aviutl/aviutl110.zip"
-[string]$exedit = "http://spring-fragrance.mints.ne.jp/aviutl/exedit92.zip"
-[string]$lw = "https://github.com/Mr-Ojii/L-SMASH-Works-Auto-Builds/releases/download/build-2022-04-05-01-57-11/L-SMASH-Works_rev1086_Mr-Ojii_AviUtl.zip"
-#[string]$lw = Get-GithubDownloadUrl "https://api.github.com/repos/Mr-Ojii/L-SMASH-Works-Auto-Builds/releases/latest" "Mr-Ojii_AviUtl.zip"
-[string]$InputPipePlugin = "https://github.com/amate/InputPipePlugin/releases/download/v1.8/InputPipePlugin_1.8.zip"
-#[string]$InputPipePlugin = Get-GithubDownloadUrl "https://api.github.com/repos/amate/InputPipePlugin/releases/latest"
-[string]$easymp4 = "https://aoytsk.blog.jp/aviutl/easymp4.zip"
-[string]$patchaul = "https://scrapbox.io/files/6242bf590ea51d001d275052.zip"
-[string]$luajit = "https://github.com/Per-Terra/LuaJIT-Auto-Builds/releases/download/build-2022-04-05-00-24-34/LuaJIT-2.1.0-beta3_Win_x86.zip"
-#[string]$luajit = Get-GithubDownloadUrl "https://api.github.com/repos/Per-Terra/LuaJIT-Auto-Builds/releases/latest" "Win_x86.zip"
+$pluginTable = @{
+    # input
+    "lw"              = @{
+        "github"  = @{"url" = "https://api.github.com/repos/Mr-Ojii/L-SMASH-Works-Auto-Builds/releases/latest"; "KeyWord" = "Mr-Ojii_AviUtl.zip" }
+        "path"    = "plugins"
+        "filter"  = "*.au*"
+        "prefix"  = "lw_"
+        "exclude" = "Licenses"
+    }
 
-## rikky
-[string]$rikkky_module = "rikkymodulea2Z"
+    "InputPipePlugin" = @{
+        "github" = @{"url" = "https://api.github.com/repos/amate/InputPipePlugin/releases/latest" }
+        "path"   = "plugins"
+        "filter" = "*.au*"
+        "prefix" = "InputPipePlugin_"
+    }
 
-# 処理ここから
+    # output
+    "easymp4"         = @{
+        "url"    = "https://aoytsk.blog.jp/aviutl/easymp4.zip"
+        "path"   = "plugins"
+        "filter" = "easymp4*"
+        "prefix" = "easymp4_"
+    }
+
+    # utility
+    "patchaul"        = @{
+        "github" = @{"url" = "https://api.github.com/repos/ePi5131/patch.aul/releases/latest" }
+        "path"   = "root"
+        "filter" = "*.au*"
+    }
+
+    # module
+    "rikky_module"    = @{
+        "amazon" = @{"id" = "rikkymodulea2Z" }
+        "path"   = "root"
+        "filter" = "rikky_*"
+    }
+}
+
+$rigayaTable = @{
+    "x264guiEx"   = @{
+        "github" = @{"url" = "https://api.github.com/repos/rigaya/x264guiEx/releases/latest" }
+        "path"   = "root"
+    }
+    "x265guiEx"   = @{
+        "github" = @{"url" = "https://api.github.com/repos/rigaya/x265guiEx/releases/latest" }
+        "path"   = "root"
+    }
+    "svtAV1guiEX" = @{
+        "github" = @{"url" = "https://api.github.com/repos/rigaya/svtAV1guiEx/releases/latest" }
+        "path"   = "root"
+    }
+    "ffmpegOut"   = @{
+        "github" = @{"url" = "https://api.github.com/repos/rigaya/ffmpegOut/releases/latest" }
+        "path"   = "root"
+    }
+    "NVEnc"       = @{
+        # AviUtl用のパッケージがGitHub上にないので、暫定対応
+        "url" = "https://drive.google.com/uc?id=1TMSQlb5v4N4cQAYjmhIdmpIhQmQp962j"
+        "github" = @{"url" = "https://api.github.com/repos/rigaya/NVEnc/releases/latest"; "KeyWord" = "AviUtl" }
+        "path"   = "root"
+    }
+    "QSVEnc"      = @{
+        "github" = @{"url" = "https://api.github.com/repos/rigaya/QSVEnc/releases/latest"; "KeyWord" = "AviUtl" }
+        "path"   = "root"
+    }
+    "VCEEnc"      = @{
+        # NVEncと同様
+        "url" = "https://drive.google.com/uc?id=1aCXBtHgis9z_wYoCffQ7a7ZXBRlk18bR"
+        "github" = @{"url" = "https://api.github.com/repos/rigaya/VCEEnc/releases/latest"; "KeyWord" = "AviUtl" }
+        "path"   = "root"
+    }
+}
+
+$otherTable = @{
+    "LuaJIT" = @{
+        "github" = @{"url" = "https://api.github.com/repos/Per-Terra/LuaJIT-Auto-Builds/releases/latest"; "KeyWord" = "Win_x86.zip" }
+        "path"   = "root"
+        "filter" = "lua51.dll"
+    }
+}
+
+$itemTable = $coreTable + $pluginTable + $rigayaTable + $otherTable
+
+# 初期化処理
 [string]$root = New-DirectryIfNotExist $InstallPath
 [string]$plugins = New-DirectryIfNotExist (Join-Path $InstallPath 'plugins')
 [string]$script = New-DirectryIfNotExist (Join-Path $InstallPath 'script')
 
-Install-UriArchive $aviutl $root
-Install-UriArchive $exedit $root
-Install-UriArchive $lw $plugins -Filter "*.au*" -Prefix "lw_" -Exclude "Licenses"
-Install-UriArchive $InputPipePlugin $plugins -Filter "*.au*" -Prefix "InputPipePlugin_"
-Install-UriArchive $easymp4 $plugins -Filter "easymp4*" -Prefix "easymp4_"
-Install-UriArchive $patchaul $root
-Install-UriArchive $luajit $root -Filter "lua51.dll"
+# インストール
+if ($All) {
+    foreach ($item in $itemTable.Keys) {
+        Install-Item $item
+    }
+} else {
+    Install-Item aviutl
+}
 
-Install-AmazonpoiArchive $rikkky_module $root -Filter "rikky_*"
+if ($Scrapbox) {
+    $exedit = $true
+    $lw = $true
+    $easymp4 = $true
+    $patchaul = $true
+}
+
+if ($exedit) {Install-Item exedit}
+# input
+if ($lw) {Install-Item lw}
+if ($InputPipePlugin) {Install-Item InputPipePlugin}
+# output
+if ($easymp4) {Install-Item easymp4}
+# utility
+if ($patchaul) {Install-Item patchaul}
+# module
+if ($rikky_module) {Install-Item rikky_module}
+# rigaya
+if ($x264guiEx) {Install-Item x264guiEx}
+if ($x265guiEx) {Install-Item x265guiEx}
+if ($svtAV1guiEX) {Install-Item svtAV1guiEX}
+if ($ffmpegOut) {Install-Item ffmpegOut}
+if ($NVEnc) {Install-Item NVEnc}
+if ($QSVEnc) {Install-Item QSVEnc}
+if ($VCEEnc) {Install-Item VCEEnc}
+# others
+if ($LuaJIT) {Install-Item LuaJIT}
 
 if (!$KeepForeignData) {
     Remove-Item $WorkingDirectry -Recurse -Force
