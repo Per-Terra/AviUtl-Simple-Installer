@@ -1,3 +1,6 @@
+# THIS REPOSITORY IS NO LONGER BEING UPDATED
+SEE [AviUtl-Installer-pwsh](https://github.com/Per-Terra/AviUtl-Installer-pwsh)
+
 # AviUtl-Simple-Installer
  Install Aviutl using PowerShell
 
